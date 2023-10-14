@@ -4,9 +4,9 @@ A raspberypi python script for sampling temperature, humidity, AQI, ECO2 and TVO
 
 **Hardware:**
 
-- raspberypi
+- Raspbery Pi
 - ENS160 Air quaility sensor
-- AM2302
+- AM2302 Temperature and Humidity sensor
 
 **Software:**
 
@@ -15,15 +15,15 @@ A raspberypi python script for sampling temperature, humidity, AQI, ECO2 and TVO
 **Dependancies:**
 
 - pandas
-- matplotlib-
-- Adafruit_DHT-
-- adafruit_ens160-
+- matplotlib
+- Adafruit_DHT
+- adafruit_ens160
 - flask
 - apscheduler
 
 **Usage:**
 
->> python WebAirQuality.py
+_python WebAirQuality.py_
 
 Access the webpage a the raspberrypi's ip address followed by the port. Example: 192.168.1.10:9999
 
