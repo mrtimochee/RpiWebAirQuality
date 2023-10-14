@@ -8,10 +8,10 @@ A raspberypi python script for sampling temperature, humidity, AQI, ECO2 and TVO
 - ENS160 Air quaility sensor
 - AM2302
 
-**Software**
+**Software:**
 Python 3 or greater
 
-**Dependancies**
+**Dependancies:**
 
 - pandas
 - matplotlib-
