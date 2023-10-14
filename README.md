@@ -9,6 +9,7 @@ A raspberypi python script for sampling temperature, humidity, AQI, ECO2 and TVO
 - AM2302
 
 **Software:**
+
 Python 3 or greater
 
 **Dependancies:**
@@ -20,7 +21,8 @@ Python 3 or greater
 - flask
 - apscheduler
 
-**Usage**
+**Usage:**
+
 python WebAirQuality.py
 Access the webpage a the raspberrypi's ip address followed by the port. Example: 192.168.1.10:9999
 Default port is 9999
