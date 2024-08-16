@@ -61,12 +61,12 @@ There are sometimes issues reported on Raspberry Pi setups when installing using
 libf77blas.so.3: cannot open shared object file: No such file or directory
 The solution will be to either:
 
-	_sudo apt-get install libatlas-base-dev_
-	to install the missing libraries expected by the self-compiled NumPy (ATLAS is a possible provider of linear algebra).
+	sudo apt-get install libatlas-base-dev
+	# to install the missing libraries expected by the self-compiled NumPy (ATLAS is a possible provider of linear algebra).
 
 Alternatively use the NumPy provided by Raspbian. In which case run:
 
-	_pip3 uninstall numpy_  # remove previously installed version
-	_apt install python3-numpy_
+	pip3 uninstall numpy  # remove previously installed version
+	apt install python3-numpy
 
 https://numpy.org/devdocs/user/troubleshooting-importerror.html
