@@ -8,6 +8,7 @@ Script for measure the air quality from multiple sensosrs on a raspberry pi and
 host a web site with values and charts of the sensor values. 
 """
 
+#%% Import modules
 import os
 import datetime as dt
 from datetime import datetime, timedelta
@@ -95,7 +96,13 @@ def create_data_frame():
     outside_temp, outdoor_hum = get_outside_temp()
 	
     # Create new dataframe
-    new_df = pd.DataFrame(index=[current_time], data={"aqi":aqi, "tvoc":tvoc, "eco2":eco2, "temp":temperature, "hum":humidity, "out_temp":outside_temp, "out_hum":outdoor_hum})
+    new_df = pd.DataFrame(index=[current_time], data={"aqi":aqi, 
+													  "tvoc":tvoc, 
+													  "eco2":eco2, 
+													  "temp":temperature, 
+													  "hum":humidity, 
+													  "out_temp":outside_temp, 
+													  "out_hum":outdoor_hum})
     
     return new_df
 
@@ -174,9 +181,30 @@ def get_outside_temp():
         # Return Outdoor temperature of the nearest forcast hour
         return closest_value['outdoor_temp'], closest_value['outdoor_hum']
     except:
-        print("Error reading outdoor temp and humidity")
+        print("Error reading outdoor temperature and humidity")
         return 0, 0
         
+    
+def color_plot(ax, x, y, thresholds, linestyle='-', marker='', colors=['g', 'y', 'r', 'k']):   
+    # Define thresholds and colors
+    # thresholds = [-20, 10, 20, 30]
+    # colors = ['g', 'b', 'm', 'y', 'r']
+        
+    # create color index
+    ci = np.zeros((len(y)))
+    for t in thresholds:
+        ci = ci + (y>t)*1
+        
+    # Color Change Index End
+    cchie = np.where(np.diff(ci)!=0)[0]
+    
+    # Color Change Index Start
+    cchis = np.concatenate((np.array([0]), cchie+1))
+    cchie = np.concatenate((cchie, np.array([len(y)])))
+    
+    for i in range(len(cchis)):
+        ax.plot(x[cchis[i]:cchie[i]], y[cchis[i]:cchie[i]], color=colors[int(ci[cchis[i]])], linestyle=linestyle, marker=marker)
+
 
 def make_plot():
     global img_base64
@@ -191,18 +219,20 @@ def make_plot():
     axs[0].plot(df.index.values, df.aqi.values,  linestyle='-', marker='', color='r')   
     
     # TVOC
-    axs[1].plot(df.index.values, df.tvoc.values, linestyle='-', marker='', color='g')
+    # axs[1].plot(df.index.values, df.tvoc.values, linestyle='-', marker='', color='g')
+    color_plot(axs[1], df.index.values, df.tvoc.values, [400, 2200, 3000], linestyle='-', marker='', colors = ['g', 'y', 'r', 'k'])
     # TVOC Boundary Lines
     axs[1].axhline(y = 400,  color = 'g', linestyle = '-') 
     axs[1].axhline(y = 2200, color = 'y', linestyle = '-') 
     axs[1].axhline(y = 3000, color = 'r', linestyle = '-') 
     # TVOC Boundary Labels
-    axs[1].text(df.index[0],  400, 'Normal',  color = 'g') 
+    axs[1].text(df.index[0],  400,  'Normal',  color = 'g') 
     axs[1].text(df.index[0],  2200, 'Bad',     color = 'y') 
-    axs[1].text(df.index[0],  3000, 'Serious', color = 'r') 
+    axs[1].text(df.index[0],  3000, 'Serious', color = 'r')     
     
     # EC02
-    axs[2].plot(df.index.values, df.eco2.values, linestyle='-', marker='', color='b')
+    # axs[2].plot(df.index.values, df.eco2.values, linestyle='-', marker='', color='b')
+    color_plot(axs[2], df.index.values, df.eco2.values, [400, 600, 800, 1000, 1500], linestyle='-', marker='', colors = ['g', 'b', 'm', 'y', 'r', 'k'])
     # ECO2 Boundary Lines
     axs[2].axhline(y = 400,  color = 'g', linestyle = '-') 
     axs[2].axhline(y = 600,  color = 'b', linestyle = '-') 
@@ -246,7 +276,7 @@ def make_plot():
     axs[4].set_ylim([0,100])
     
     # Format the x-axis datetime ticks
-    date_format = mdates.DateFormatter('%H:%M')  # Customize the date format as needed
+    date_format = mdates.DateFormatter('%I:%M %p')  # Customize the date format as needed
     axs[4].xaxis.set_major_formatter(date_format)
     axs[4].xaxis.set_major_locator(mdates.MinuteLocator(interval=30))  # Specify tick interval
     
@@ -278,7 +308,7 @@ def index():
     df = pd.read_pickle(file_path)
     
     # Format time
-    formatted_time = df.index[-1].strftime("%Y-%m-%d %H:%M:%S")	
+    formatted_time = df.index[-1].strftime("%Y-%m-%d %I:%M:%S %p")	
     
     # Temperature classification
     temp = df.temp.iloc[-1]
@@ -286,12 +316,14 @@ def index():
         temp_quality = 'Very Low'
     elif temp>=60 and temp<68:
         temp_quality = 'Low'
-    elif temp>=68 and temp<=76:
+    elif temp>=68 and temp<76:
         temp_quality = 'Good'
     elif temp>=76 and temp<80:
         temp_quality = 'High'
-    elif temp>=76 and temp<80:
+    elif temp>=80:
         temp_quality = 'Very High'
+    else:
+        temp_quality = 'Unknown'
         
     # Humidity classification
     humidity = df.hum.iloc[-1]
@@ -317,9 +349,9 @@ def index():
     humidity_dif = np.round(humidity - recommended_humidity)
     
     if humidity_dif>0:
-        hum_quality = 'High, ' + str(humidity_dif)
+        hum_quality = 'High, +' + str(humidity_dif) + '%'
     else:
-        hum_quality = 'Low, ' + str(humidity_dif)
+        hum_quality = 'Low, -' + str(humidity_dif) + '%'
             
     if abs(humidity_dif)>=10:
         hum_quality = 'Very ' + hum_quality
@@ -331,7 +363,7 @@ def index():
         hum_quality = 'NA'   
         
     # AQI classification
-    aqi_class_dict = {1:'Excellent',2:'Good',3:'Moderate',4:'Poor',5:'Unhealthy'}
+    aqi_class_dict = {1:'Excellent', 2:'Good', 3:'Moderate', 4:'Poor', 5:'Unhealthy'}
     try:
         aqi_class = aqi_class_dict[df.aqi.iloc[-1]]
     except:
@@ -342,9 +374,9 @@ def index():
     if tvoc<400:
         tvoc_quality = 'Normal'
     elif tvoc>=400 and tvoc<2200:
-        tvoc_quality = 'Iidentify the sources of VOCs and eliminate them'
+        tvoc_quality = 'Identify the sources of VOCs and eliminate them.'
     elif tvoc>=2200 and tvoc<3000:
-        tvoc_quality = 'Take immediate action to improve air quality by increasing ventilation and removing products that emit gasses'
+        tvoc_quality = 'Take immediate action to improve air quality by increasing ventilation and removing products that emit gasses.'
     
     # eco2 classification  
     eco2 = df.eco2.iloc[-1]
@@ -387,7 +419,7 @@ if __name__ == "__main__":
     get_forcast()
     
     # Sample Rate
-    sec_between_log_entries = 30
+    sec_between_log_entries = 60 # Don't set below 60 or it will freeze up
     
     # Create timer that is called every n seconds, without accumulating delays as when using sleep
     print("Creating interval timer. This step takes almost 2 minutes on the Raspberry Pi...")   
@@ -400,7 +432,7 @@ if __name__ == "__main__":
 
     # Start webserver
     try:
-        app.run(host='192.168.0.110', port=9999, debug=True, use_reloader=False)
+        app.run(host='192.168.0.173', port=9999, debug=True, use_reloader=False)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
 
