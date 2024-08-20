@@ -1,17 +1,63 @@
-<html>
-  <head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Raspberry Pi Air Quality</title>
-  </head>
-  <body>
-    <h1>Raspberry Pi Air Quality</h1>
-	<font size=5>
-    <p>Current time:  {{ time }}</p>
-    <p>Temperature F: {{ temperature }} {{ temp_quality }}</p>
-    <p>Humidity %: {{ humidity }} {{ hum_quality }}</p>
-	<p>AQI (1-5): {{ aqi }} {{ aqi_type }}</p>
-	<p>TVOC (ppb): {{ tvoc }} {{ tvoc_quality }}</p>
-	<p>eCO2 (ppm): {{ eco2 }} {{ eco2_type }}</p>
-	</font>
-	<img src="data:image/png;base64,{{ plot_image }}" alt="Air Quality Plot">
-  </body>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        p {
+            font-size: 1.2em;
+        }
+        .quality {
+            font-weight: bold;
+        }
+        img {
+            display: block;
+            margin: 20px auto;
+            max-width: 100%;
+        }
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 15px;
+            }
+            p {
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Raspberry Pi Air Quality</h1>
+        <p>Current time: <span class="quality">{{ time }}</span></p>
+        <p>Temperature F: <span class="quality">{{ temperature }}</span> <span class="quality">{{ temp_quality }}</span></p>
+        <p>Humidity %: <span class="quality">{{ humidity }}</span> <span class="quality">{{ hum_quality }}</span></p>
+        <p>AQI (1-5): <span class="quality">{{ aqi }}</span> <span class="quality">{{ aqi_type }}</span></p>
+        <p>TVOC (ppb): <span class="quality">{{ tvoc }}</span> <span class="quality">{{ tvoc_quality }}</span></p>
+        <p>eCO2 (ppm): <span class="quality">{{ eco2 }}</span> <span class="quality">{{ eco2_type }}</span></p>
+        <img src="data:image/png;base64,{{ plot_image }}" alt="Air Quality Plot">
+    </div>
+</body>
 </html>
