@@ -10,22 +10,23 @@ host a web site with values and charts of the sensor values.
 
 #%% Import modules
 import os
+import re
 import datetime as dt
 from datetime import datetime, timedelta
 import board
 import RPi.GPIO as GPIO
 import Adafruit_DHT
 import adafruit_ens160
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
-import io
 import numpy as np
 import requests
 import json
-import base64
-from flask import Flask, render_template#, send_file
 from apscheduler.schedulers.background import BackgroundScheduler
+import socket
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import threading
 
     
 #%% AM2302
@@ -46,21 +47,17 @@ ens.temperature_compensation = 23
 # Same for ambient relative humidity
 ens.humidity_compensation = 55
 
-#%% Create blank image for img_base64
-# Save the plot to a BytesIO object
-plt.plot()
-img_stream = io.BytesIO()
-plt.savefig(img_stream, format='png')
-img_stream.seek(0)
-plt.close()
-
-# Encode the plot image as base64
-img_base64 = base64.b64encode(img_stream.read()).decode('utf-8')
-
 #%% Predefine global forcast dataframe
 forcast_df = pd.DataFrame({})
 
 #%% Functions
+def get_wlan0_ip():
+    result = os.popen('ifconfig wlan0').read()
+    match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', result)
+    if match:
+        return match.group(1)
+    return None
+
 def read_temp_humidity():
     # Read the temperature and humidity from the sensor
     humidity, temperature = Adafruit_DHT.read_retry(sensor, DHT_PIN)
@@ -185,130 +182,30 @@ def get_outside_temp():
         return 0, 0
         
     
-def color_plot(ax, x, y, thresholds, linestyle='-', marker='', colors=['g', 'y', 'r', 'k']):   
-    # Define thresholds and colors
-    # thresholds = [-20, 10, 20, 30]
-    # colors = ['g', 'b', 'm', 'y', 'r']
-        
-    # create color index
+def get_color_segments(x, y, thresholds, colors=['green', 'yellow', 'red', 'black']):
+    """Generate color-coded segments for Plotly based on thresholds"""
+    # Create color index
     ci = np.zeros((len(y)))
     for t in thresholds:
-        ci = ci + (y>t)*1
-        
-    # Color Change Index End
-    cchie = np.where(np.diff(ci)!=0)[0]
+        ci = ci + (y > t) * 1
     
-    # Color Change Index Start
-    cchis = np.concatenate((np.array([0]), cchie+1))
+    # Find color change indices
+    cchie = np.where(np.diff(ci) != 0)[0]
+    cchis = np.concatenate((np.array([0]), cchie + 1))
     cchie = np.concatenate((cchie, np.array([len(y)])))
     
+    segments = []
     for i in range(len(cchis)):
-        ax.plot(x[cchis[i]:cchie[i]], y[cchis[i]:cchie[i]], color=colors[int(ci[cchis[i]])], linestyle=linestyle, marker=marker)
+        segments.append({
+            'x': x[cchis[i]:cchie[i]],
+            'y': y[cchis[i]:cchie[i]],
+            'color': colors[int(ci[cchis[i]])]
+        })
+    return segments
 
-
-def make_plot():
-    global img_base64
-    
-    # Read in data frame of air quality data
-    df = pd.read_pickle(file_path)
-    	   
-    # Create subplots
-    fig, axs = plt.subplots(5, 1, figsize=(8, 16), sharex=True)  
-    
-    # AQI
-    axs[0].plot(df.index.values, df.aqi.values,  linestyle='-', marker='', color='r')   
-    
-    # TVOC
-    # axs[1].plot(df.index.values, df.tvoc.values, linestyle='-', marker='', color='g')
-    color_plot(axs[1], df.index.values, df.tvoc.values, [400, 2200, 3000], linestyle='-', marker='', colors = ['g', 'y', 'r', 'k'])
-    # TVOC Boundary Lines
-    axs[1].axhline(y = 400,  color = 'g', linestyle = '-') 
-    axs[1].axhline(y = 2200, color = 'y', linestyle = '-') 
-    axs[1].axhline(y = 3000, color = 'r', linestyle = '-') 
-    # TVOC Boundary Labels
-    axs[1].text(df.index[0],  400,  'Normal',  color = 'g') 
-    axs[1].text(df.index[0],  2200, 'Bad',     color = 'y') 
-    axs[1].text(df.index[0],  3000, 'Serious', color = 'r')     
-    
-    # EC02
-    # axs[2].plot(df.index.values, df.eco2.values, linestyle='-', marker='', color='b')
-    color_plot(axs[2], df.index.values, df.eco2.values, [400, 600, 800, 1000, 1500], linestyle='-', marker='', colors = ['g', 'b', 'm', 'y', 'r', 'k'])
-    # ECO2 Boundary Lines
-    axs[2].axhline(y = 400,  color = 'g', linestyle = '-') 
-    axs[2].axhline(y = 600,  color = 'b', linestyle = '-') 
-    axs[2].axhline(y = 800,  color = 'm', linestyle = '-') 
-    axs[2].axhline(y = 1000, color = 'y', linestyle = '-') 
-    axs[2].axhline(y = 1500, color = 'r', linestyle = '-') 
-    # ECO2 Boundary Labels
-    axs[2].text(df.index[0],  400, 'Excellent', color = 'g') 
-    axs[2].text(df.index[0],  600, 'Good',      color = 'b') 
-    axs[2].text(df.index[0],  800, 'Fair',      color = 'm') 
-    axs[2].text(df.index[0], 1000, 'Poor',      color = 'y') 
-    axs[2].text(df.index[0], 1500, 'Bad',       color = 'r') 
-    
-    # Temperature
-    axs[3].plot(df.index.values, df.temp.values, linestyle='-', marker='', color='m')
-    
-    # Outside Temperature
-    axs[4].plot(df.index.values, df.out_temp.values, linestyle='--', marker='', color='m')
-    
-    # Humidity
-    axs[4].plot(df.index.values, df.hum.values,  linestyle='-', marker='', color='b')
-    axs[4].plot(df.index.values, df.out_hum.values,  linestyle='--', marker='', color='b')
-    
-    # Hide xticks
-    for ax in axs:
-        ax.set_xticks([])
-        ax.grid()
-    
-    # y labels
-    axs[0].set_ylabel("AQI")
-    axs[1].set_ylabel("TVOC, ppb")
-    axs[2].set_ylabel("ECO2, ppm")
-    axs[3].set_ylabel("Temperature, F")
-    axs[4].set_ylabel("Humidity, %")
-    
-    # y limits
-    axs[0].set_yticks(np.arange(0, 6, 1))
-    axs[0].set_yticklabels([' ','Excellent','Good','Moderate','Poor','Unhealthy'])
-    axs[2].set_ylim([300,1600])
-    axs[3].set_ylim([40,90])
-    axs[4].set_ylim([0,100])
-    
-    # Format the x-axis datetime ticks
-    date_format = mdates.DateFormatter('%I:%M %p')  # Customize the date format as needed
-    axs[4].xaxis.set_major_formatter(date_format)
-    axs[4].xaxis.set_major_locator(mdates.MinuteLocator(interval=30))  # Specify tick interval
-    
-    # Add labels and a title
-    axs[4].set_xlabel("Date Time")
-    plt.xticks(rotation=90)  # Adjust the rotation angle as needed  
-    
-    # Adjust subplot spacing
-    plt.tight_layout()
-     
-    # Save the plot to a BytesIO object
-    img_stream = io.BytesIO()
-    plt.savefig(img_stream, format='png')
-    img_stream.seek(0)
-    plt.close()
-    
-    # Encode the plot image as base64
-    img_base64 = base64.b64encode(img_stream.read()).decode('utf-8')
-
-
-#%%	app
-# Flask web framework
-app = Flask(__name__)
-
-# Route to the main page
-@app.route("/")
-def index():
-	# Read pickle file
-    df = pd.read_pickle(file_path)
-    
+def air_quality_context(df):   
     # Format time
-    formatted_time = df.index[-1].strftime("%Y-%m-%d %I:%M:%S %p")	
+    formatted_time = df.index[-1].strftime("%Y-%m-%d %H:%M:%S")	
     
     # Temperature classification
     temp = df.temp.iloc[-1]
@@ -316,19 +213,17 @@ def index():
         temp_quality = 'Very Low'
     elif temp>=60 and temp<68:
         temp_quality = 'Low'
-    elif temp>=68 and temp<76:
+    elif temp>=68 and temp<=76:
         temp_quality = 'Good'
     elif temp>=76 and temp<80:
         temp_quality = 'High'
-    elif temp>=80:
+    elif temp>=76 and temp<80:
         temp_quality = 'Very High'
-    else:
-        temp_quality = 'Unknown'
         
     # Humidity classification
     humidity = df.hum.iloc[-1]
-    outside_temp = df.out_temp.iloc[-1]
-    
+    outside_temp = 40
+    # outside_temp = get_outside_temp()
     if outside_temp>=40:
         recommended_humidity = 45
     elif outside_temp>=30:
@@ -343,40 +238,36 @@ def index():
         recommended_humidity = 20
     elif outside_temp>=-20:
         recommended_humidity = 15
-    else:
-        recommended_humidity = 0
-        
-    humidity_dif = np.round(humidity - recommended_humidity)
-    
-    if humidity_dif>0:
-        hum_quality = 'High, +' + str(humidity_dif) + '%'
-    else:
-        hum_quality = 'Low, -' + str(humidity_dif) + '%'
-            
-    if abs(humidity_dif)>=10:
-        hum_quality = 'Very ' + hum_quality
-    elif abs(humidity_dif)>=5:
-        hum_quality = hum_quality
-    elif abs(humidity_dif)<5:
+       
+    humidity_dif = humidity - recommended_humidity
+    if abs(humidity_dif)>3:
         hum_quality = 'Ok'
+    elif abs(humidity_dif)>5:
+        if humidity_dif>0:
+            hum_quality = 'High'
+        else:
+            hum_quality = 'Low'
+    elif abs(humidity_dif)>10:
+        if humidity_dif>0:
+            hum_quality = 'Very High'
+        else:
+            hum_quality = 'Very Low'
     else:
-        hum_quality = 'NA'   
+        hum_quality = 'NA'
+    
         
     # AQI classification
-    aqi_class_dict = {1:'Excellent', 2:'Good', 3:'Moderate', 4:'Poor', 5:'Unhealthy'}
-    try:
-        aqi_class = aqi_class_dict[df.aqi.iloc[-1]]
-    except:
-        aqi_class = "Error"
+    aqi_class_dict = {1:'Excellent',2:'Good',3:'Moderate',4:'Poor',5:'Unhealthy'}
+    aqi_class = aqi_class_dict[df.aqi.iloc[-1]]
     
     # TVOC classification
     tvoc = df.tvoc.iloc[-1]
     if tvoc<400:
         tvoc_quality = 'Normal'
     elif tvoc>=400 and tvoc<2200:
-        tvoc_quality = 'Identify the sources of VOCs and eliminate them.'
+        tvoc_quality = 'Iidentify the sources of VOCs and eliminate them'
     elif tvoc>=2200 and tvoc<3000:
-        tvoc_quality = 'Take immediate action to improve air quality by increasing ventilation and removing products that emit gasses.'
+        tvoc_quality = 'Take immediate action to improve air quality by increasing ventilation and removing products that emit gasses'
     
     # eco2 classification  
     eco2 = df.eco2.iloc[-1]
@@ -390,21 +281,172 @@ def index():
         eco2_quality = 'Poor'
     elif eco2>=15000:
         eco2_quality = 'Bad'
+
+    return {
+        'time': formatted_time, 
+        'temperature': temp,
+        'temp_quality': temp_quality,
+        'humidity': humidity,
+        'hum_quality': hum_quality,
+        'aqi': df.aqi.iloc[-1],
+        'aqi_type': aqi_class,
+        'tvoc': tvoc,
+        'tvoc_quality': tvoc_quality,
+        'eco2': eco2,
+        'eco2_type': eco2_quality
+    }
+
+
+def make_plot():
+    # Read in data frame of air quality data
+    df = pd.read_pickle(file_path)
+    
+    current_air_quality = air_quality_context(df) 
+
+    # Create subplots with 5 rows
+    fig = make_subplots(
+        rows=5, cols=1,
+        shared_xaxes=True,
+        subplot_titles=("AQI", "TVOC (ppb)", "eCO2 (ppm)", "Indoor Temperature (F)", "Humidity (%) & Outside Temp"),
+        vertical_spacing=0.08
+    )
+    
+    # AQI - Row 1
+    fig.add_trace(
+        go.Scatter(x=df.index, y=df.aqi.values, mode='lines', name='AQI', 
+                   line=dict(color='red', width=2)),
+        row=1, col=1
+    )
+    fig.update_yaxes(range=[0, 5], dtick=1, row=1, col=1)
+
+    # TVOC - Row 2 with color-coded segments
+    tvoc_segments = get_color_segments(df.index.values, df.tvoc.values, 
+                                       [400, 2200, 3000], 
+                                       colors=['green', 'yellow', 'red', 'black'])
+    for segment in tvoc_segments:
+        fig.add_trace(
+            go.Scatter(x=segment['x'], y=segment['y'], mode='lines', 
+                       line=dict(color=segment['color'], width=2),
+                       showlegend=False),
+            row=2, col=1
+        )
+
+    fig.update_yaxes(showticklabels=False, row=2, col=1)
+
+    # Add threshold lines for TVOC
+    for y_val, label, color in [(400, 'Normal', 'green'), (2200, 'Bad', 'yellow'), (3000, 'Serious', 'red')]:
+        fig.add_hline(y=y_val, line_dash="dash", line_color=color, annotation_text=label,
+                      annotation_position="left", row=2, col=1)
+    fig.update_yaxes(row=2, col=1)
+    
+    # eCO2 - Row 3 with color-coded segments
+    eco2_segments = get_color_segments(df.index.values, df.eco2.values, 
+                                       [400, 600, 800, 1000, 1500], 
+                                       colors=['green', 'blue', 'magenta', 'yellow', 'red', 'black'])
+    for segment in eco2_segments:
+        fig.add_trace(
+            go.Scatter(x=segment['x'], y=segment['y'], mode='lines', 
+                       line=dict(color=segment['color'], width=2),
+                       showlegend=False),
+            row=3, col=1
+        )
         
-	# Pass the values to the template
-    return render_template("index.html", 
-                            time = formatted_time,
-                            temperature = temp, 
-                            temp_quality = temp_quality,
-                            humidity = humidity, 
-                            hum_quality = hum_quality,
-                            aqi = df.aqi.iloc[-1],
-                            aqi_type = aqi_class,
-                            tvoc = tvoc, 
-                            tvoc_quality = tvoc_quality,
-                            eco2 = eco2,
-                            eco2_type = eco2_quality,
-                            plot_image = img_base64)
+    fig.update_yaxes(showticklabels=False, row=3, col=1)
+
+    # Add threshold lines for eCO2
+    for y_val, label, color in [(400, 'Excellent', 'green'), (600, 'Good', 'blue'), 
+                                 (800, 'Fair', 'magenta'), (1000, 'Poor', 'yellow'), 
+                                 (1500, 'Bad', 'red')]:
+        fig.add_hline(y=y_val, line_dash="dash", line_color=color, annotation_text=label,
+                      annotation_position="left", row=3, col=1)
+    fig.update_yaxes(range=[300, 1600], row=3, col=1)
+    
+    # Temperature - Row 4
+    fig.add_trace(
+        go.Scatter(x=df.index, y=df.temp.values, mode='lines', name='Indoor Temp',
+                   line=dict(color='magenta', width=2)),
+        row=4, col=1
+    )
+    fig.update_yaxes(range=[40, 90], row=4, col=1)
+    
+    # Humidity and Outside Temp - Row 5
+    fig.add_trace(
+        go.Scatter(x=df.index, y=df.out_temp.values, mode='lines', name='Outside Temp',
+                   line=dict(color='magenta', width=2, dash='dash')),
+        row=5, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=df.index, y=df.hum.values, mode='lines', name='Indoor Humidity',
+                   line=dict(color='blue', width=2)),
+        row=5, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=df.index, y=df.out_hum.values, mode='lines', name='Outside Humidity',
+                   line=dict(color='blue', width=2, dash='dash')),
+        row=5, col=1
+    )
+    fig.update_yaxes(range=[0, 100], row=5, col=1)
+    fig.update_xaxes(title_text="Date Time", row=5, col=1)
+    
+    # Update layout with dark theme
+    fig.update_layout(
+        title_text=f"""<b>Air Quality Monitoring Dashboard</b><br>
+        Current Time: {current_air_quality['time']}<br>
+        Temperature: {current_air_quality['temperature']}°F ({current_air_quality['temp_quality']})<br>
+        Humidity: {current_air_quality['humidity']}% ({current_air_quality['hum_quality']})<br>
+        AQI: {current_air_quality['aqi']} ({current_air_quality['aqi_type']})<br>
+        TVOC: {current_air_quality['tvoc']} ppb ({current_air_quality['tvoc_quality']})<br>
+        eCO2: {current_air_quality['eco2']} ppm ({current_air_quality['eco2_type']})""",
+        title_x=0.5,
+        height=1200,
+        width=1000,
+        margin=dict(t=350, b=0),
+        showlegend=False,
+        hovermode='x unified',
+        font=dict(size=12, color='white'),
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        title_font_color='white',
+        xaxis_title_font_color='white',
+        yaxis_title_font_color='white',
+        legend_title_font_color='white'
+    )
+    
+    # Update all x and y axes to have white text
+    fig.update_xaxes(title_font_color='white', tickfont_color='white', showgrid=True, gridcolor='#333333')
+    fig.update_yaxes(title_font_color='white', tickfont_color='white', showgrid=True, gridcolor='#333333')
+    
+    # Save as HTML file
+    fig.write_html('index.html')
+    
+    # Add black background to HTML page
+    with open('index.html', 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    # Inject CSS to make body background black
+    css_injection = '<style>body { background-color: #000000; margin: 0; padding: 0; }</style>'
+    html_content = html_content.replace('<head>', '<head>' + css_injection)
+    
+    with open('index.html', 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+
+#%% Web Server
+def start_http_server(port=9999):
+    """Start a simple HTTP server to serve the dashboard."""
+    class MyHTTPRequestHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=".", **kwargs)
+        
+        def log_message(self, format, *args):
+            # Suppress logging or customize as needed
+            print(f"[HTTP] {format % args}")
+    
+    server = HTTPServer((get_wlan0_ip() or "0.0.0.0", port), MyHTTPRequestHandler)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    print(f"HTTP server started on http://{get_wlan0_ip() or 'localhost'}:{port}/templates/index.html")
+    return server
 
     
 #%% Main
@@ -430,9 +472,12 @@ if __name__ == "__main__":
     scheduler.start()
     print("Started interval timer which will be called the first time in {0} seconds.".format(sec_between_log_entries))
 
-    # Start webserver
+    # Start HTTP server
     try:
-        app.run(host='192.168.0.173', port=9999, debug=True, use_reloader=False)
+        server = start_http_server(9999)
+        # Keep the program running
+        while True:
+            pass
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
 
