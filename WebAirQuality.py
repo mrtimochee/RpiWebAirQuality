@@ -445,7 +445,7 @@ def start_http_server(port=9999):
     server = HTTPServer((get_wlan0_ip() or "0.0.0.0", port), MyHTTPRequestHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    print(f"HTTP server started on http://{get_wlan0_ip() or 'localhost'}:{port}/templates/index.html")
+    print(f"HTTP server started on http://{get_wlan0_ip() or 'localhost'}:{port}/index.html")
     return server
 
     
