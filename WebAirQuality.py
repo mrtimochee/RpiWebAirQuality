@@ -217,7 +217,7 @@ def air_quality_context(df):
         temp_quality = 'Good'
     elif temp>=76 and temp<80:
         temp_quality = 'High'
-    elif temp>=76 and temp<80:
+    elif temp>=80:
         temp_quality = 'Very High'
         
     # Humidity classification
@@ -391,12 +391,12 @@ def make_plot():
     # Update layout with dark theme
     fig.update_layout(
         title_text=f"""<b>Air Quality Monitoring Dashboard</b><br>
-        Current Time: {current_air_quality['time']}<br>
-        Temperature: {current_air_quality['temperature']}°F ({current_air_quality['temp_quality']})<br>
-        Humidity: {current_air_quality['humidity']}% ({current_air_quality['hum_quality']})<br>
-        AQI: {current_air_quality['aqi']} ({current_air_quality['aqi_type']})<br>
-        TVOC: {current_air_quality['tvoc']} ppb ({current_air_quality['tvoc_quality']})<br>
-        eCO2: {current_air_quality['eco2']} ppm ({current_air_quality['eco2_type']})""",
+    Current Time: {current_air_quality['time']}<br>
+    Temperature: {current_air_quality['temperature']}°F ({current_air_quality['temp_quality']})<br>
+    Humidity: {current_air_quality['humidity']}% ({current_air_quality['hum_quality']})<br>
+    AQI: {current_air_quality['aqi']} ({current_air_quality['aqi_type']})<br>
+    TVOC: {current_air_quality['tvoc']} ppb ({current_air_quality['tvoc_quality']})<br>
+    eCO2: {current_air_quality['eco2']} ppm ({current_air_quality['eco2_type']})""",
         title_x=0.5,
         height=1200,
         width=1000,
