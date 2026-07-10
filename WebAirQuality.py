@@ -398,9 +398,9 @@ def make_plot():
     TVOC: {current_air_quality['tvoc']} ppb ({current_air_quality['tvoc_quality']})<br>
     eCO2: {current_air_quality['eco2']} ppm ({current_air_quality['eco2_type']})""",
         title_x=0.5,
-        height=1200,
-        width=1000,
-        margin=dict(t=350, b=0),
+        autosize=True,
+        height=1000,
+        margin=dict(t=360, b=20, l=20, r=20),
         showlegend=False,
         hovermode='x unified',
         font=dict(size=12, color='white'),
@@ -417,15 +417,51 @@ def make_plot():
     fig.update_yaxes(title_font_color='white', tickfont_color='white', showgrid=True, gridcolor='#333333')
     
     # Save as HTML file
-    fig.write_html('index.html')
+    fig.write_html(
+        'index.html',
+        config={'responsive': True, 'displayModeBar': False}
+    )
     
-    # Add black background to HTML page
+    # Add black background and responsive viewport styling to the HTML page
     with open('index.html', 'r', encoding='utf-8') as f:
         html_content = f.read()
     
-    # Inject CSS to make body background black
-    css_injection = '<style>body { background-color: #000000; margin: 0; padding: 0; }</style>'
-    html_content = html_content.replace('<head>', '<head>' + css_injection)
+    css_injection = '''
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <style>
+        html, body {
+            background-color: #000000;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+        }
+        body {
+            box-sizing: border-box;
+        }
+        .plotly-graph-div {
+            width: 100% !important;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+            .plotly-graph-div {
+                max-width: 100% !important;
+            }
+            .gtitle {
+                font-size: 18px !important;
+            }
+        }
+    </style>'''
+
+    if '<meta name="viewport"' not in html_content:
+        html_content = html_content.replace('<head>', '<head>' + css_injection)
+    else:
+        html_content = html_content.replace('</head>', css_injection + '</head>')
     
     with open('index.html', 'w', encoding='utf-8') as f:
         f.write(html_content)
