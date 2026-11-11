@@ -1,72 +1,107 @@
-# RpiWebAirQuality
-WebAirQuality
-A raspberypi python script for sampling temperature, humidity, AQI, ECO2 and TVOC. It also runs a webserver to display these values and coresponding graphs to a webpage.
+# RpiWebAirQuality v2.0
 
-**Hardware:**
+A high-performance Raspberry Pi air quality monitor and responsive web dashboard. Samples temperature, humidity, AQI, eCO2, and TVOC from onboard sensors, retrieves outdoor weather forecasts, and serves an interactive real-time dashboard.
 
-- Raspbery Pi
-- ENS160 Air quaility sensor
-- AM2302 Temperature and Humidity sensor
+---
 
-**Software:**
+## Key Improvements in v2.0
+- **< 1% CPU Utilization**: Replaced the server-side Plotly rendering pipeline and main-thread busy loop with client-side canvas charting (Chart.js) and a lightweight Flask REST API.
+- **Zero SD Card Wear**: Migrated from rewriting monolithic pickle and HTML files every minute to an atomic SQLite database with Write-Ahead Logging (WAL).
+- **Dynamic Sensor Compensation**: Feeds live ambient temperature and humidity from the AM2302 directly into the ENS160 registers for maximum VOC and eCO2 measurement accuracy.
+- **Responsive Dark-Mode UI**: Mobile-friendly dashboard with live status cards, scale indicators, and interactive synchronized charts with configurable time horizons (6h, 12h, 24h, 3d, 7d).
+- **Automatic Legacy Migration**: Seamlessly imports historical data from `aq_data.pkl` into the new SQLite database on first startup.
 
-- Python 3 or greater
+---
 
-**Dependancies:**
+## Hardware
+- **Raspberry Pi** (3, 4, 5, or Zero 2 W)
+- **ENS160** Air Quality Sensor (I2C)
+- **AM2302 / DHT22** Temperature & Humidity Sensor (GPIO Pin 4)
 
-- pandas
-- matplotlib
+---
+
+## Software & Dependencies
+- Python 3.8+
+- Flask
+- APScheduler
+- Requests
 - Adafruit_DHT
-- adafruit_ens160
-- flask
-- apscheduler
+- adafruit-circuitpython-ens160
 
-**Setup:**
+### One-Command Setup:
+```bash
+chmod +x WebAirQuality_dependacies.sh
+./WebAirQuality_dependacies.sh
+```
 
-Install dependancies:
-- _pip3 install pandas_
-- _pip3 install board_
-- _pip3 install Adafruit_DHT_
-- _pip3 install adafruit-circuitpython-ens160_
-- _pip3 install flask_
-- _pip3 install apscheduler_
+Or manually install via pip:
+```bash
+pip3 install flask apscheduler requests adafruit-circuitpython-ens160 Adafruit_DHT
+```
 
-Enable I2C interface
- - _sudo raspi-config_ > Interface > enable I2C
- - Set IP address to a static IP address on you router
- - Change IP address at the end of the WebAirQuality.py file
+### Hardware Configuration:
+Enable I2C on the Raspberry Pi:
+```bash
+sudo raspi-config
+# Navigate to: Interface Options -> I2C -> Enable
+```
 
-**Test Scripts:**
+---
 
- - forcast_test.py
- - sensor_test.py
- - read_pickle.py
-   
-**Usage:**
+## Usage
+Start the dashboard server:
+```bash
+python3 WebAirQuality.py
+```
 
-_python WebAirQuality.py_
+Access the dashboard from any browser on your local network:
+```
+http://<raspberrypi-ip>:9999/
+# Or via mDNS:
+http://raspberrypi.local:9999/
+```
 
-Access the webpage a the raspberrypi's ip address followed by the port. Example: _192.168.1.10:9999_ or _raspberypi.local:9999_
+Default port is `9999`.
 
-Default port is: 9999
+---
 
-**Trouble Shooting**
+## REST API Endpoints
+The backend provides lightweight JSON endpoints for integration into Home Assistant or custom tools:
+- `GET /api/current`: Returns the latest sensor readings, outdoor weather, evaluation labels, and badge colors.
+- `GET /api/history?hours=24`: Returns time series data points for plotting (supports 6, 12, 24, 72, 168 hours).
+- `GET /api/weather`: Returns cached National Weather Service hourly forecast information.
+- `GET /api/status`: Returns system diagnostics, database record count, and hardware status.
 
-If "error: externally-managed-environment..." when installing pip use the following command:
-_sudo mv /usr/lib/python3.11/EXTERNALLY-MANAGED /usr/lib/python3.11/EXTERNALLY-MANAGED.old_
+---
 
+## Running as a System Service (Optional)
+To ensure the dashboard runs automatically in the background on system boot:
 
-There are sometimes issues reported on Raspberry Pi setups when installing using pip3 install (or pip install). These will typically mention:
+1. Create a service file:
+```bash
+sudo nano /etc/systemd/system/airquality.service
+```
 
-libf77blas.so.3: cannot open shared object file: No such file or directory
-The solution will be to either:
+2. Add the following configuration (adjust paths and user as appropriate):
+```ini
+[Unit]
+Description=Raspberry Pi Web Air Quality Service
+After=network.target
 
-	sudo apt-get install libatlas-base-dev
-	# to install the missing libraries expected by the self-compiled NumPy (ATLAS is a possible provider of linear algebra).
+[Service]
+User=pi
+WorkingDirectory=/home/pi/RpiWebAirQuality
+ExecStart=/usr/bin/python3 /home/pi/RpiWebAirQuality/WebAirQuality.py
+Restart=always
+RestartSec=10
 
-Alternatively use the NumPy provided by Raspbian. In which case run:
+[Install]
+WantedBy=multi-user.target
+```
 
-	pip3 uninstall numpy  # remove previously installed version
-	apt install python3-numpy
-
-https://numpy.org/devdocs/user/troubleshooting-importerror.html
+3. Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable airquality
+sudo systemctl start airquality
+```

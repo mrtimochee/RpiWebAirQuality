@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raspberry Pi Air Quality Monitor</title>
+    <!-- Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-body: #0a0c10;
+            --bg-card: #12151e;
+            --bg-card-hover: #181c28;
+            --border-color: #212638;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #3b82f6;
+            --emerald: #10b981;
+            --amber: #f59e0b;
+            --red: #ef4444;
+            --purple: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            max-width: 1440px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title-group h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .title-group p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--emerald);
+            background: rgba(16, 185, 129, 0.12);
+            padding: 0.35rem 0.7rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--emerald);
+            box-shadow: 0 0 8px var(--emerald);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .refresh-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.45rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .refresh-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: #3b82f6;
+        }
+
+        /* Metric Cards Grid */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.15rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.75rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .card:hover {
+            border-color: #333a4f;
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .card-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
+            border-radius: 6px;
+            text-transform: capitalize;
+            white-space: nowrap;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+        }
+
+        .card-unit {
+            font-size: 0.9rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 0.2rem;
+        }
+
+        .card-subtext {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Scale Bar for AQI */
+        .aqi-scale {
+            display: flex;
+            gap: 4px;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.25rem;
+        }
+
+        .aqi-scale-step {
+            flex: 1;
+            background: #252a38;
+            border-radius: 2px;
+            transition: background 0.3s ease;
+        }
+
+        /* Time Range Selector */
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .toolbar-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .range-selector {
+            display: flex;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+        }
+
+        .range-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .range-btn:hover {
+            color: var(--text-main);
+        }
+
+        .range-btn.active {
+            background: var(--accent);
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        /* Charts Grid */
+        .charts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chart-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 240px;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 0.75rem;
+                gap: 0.85rem;
+            }
+            .card-value {
+                font-size: 1.6rem;
+            }
+            .chart-wrapper {
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="title-group">
+            <h1>🌿 Air Quality Monitor</h1>
+            <p id="subheading">Connecting to Raspberry Pi sensor telemetry...</p>
+        </div>
+        <div class="header-controls">
+            <div class="live-badge">
+                <span class="pulse-dot"></span>
+                <span>LIVE</span>
+            </div>
+            <button class="refresh-btn" onclick="fetchData()">⟳ Refresh</button>
+        </div>
+    </header>
+
+    <!-- Top KPI Metric Cards -->
+    <section class="cards-grid">
+        <!-- AQI Card -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-label">Air Quality Index</span>
+                <span id="aqi-badge" class="status-badge">--</span>
+            </div>
+            <div>
+                <span id="aqi-val" class="card-value">--</span>
+                <span class="card-unit">/ 5</span>
+            </div>
+            <div class="aqi-scale">
+                <div id="step-1" class="aqi-scale-step"></div>
+                <div id="step-2" class="aqi-scale-step"></div>
+                <div id="step-3" class="aqi-scale-step"></div>
+                <div id="step-4" class="aqi-scale-step"></div>
+                <div id="step-5" class="aqi-scale-step"></div>
+            </div>
+            <div class="card-subtext" id="aqi-desc">1: Excellent • 5: Unhealthy</div>
+        </div>
+
+        <!-- TVOC Card -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-label">Total VOC</span>
+                <span id="tvoc-badge" class="status-badge">--</span>
+            </div>
+            <div>
+                <span id="tvoc-val" class="card-value">--</span>
+                <span class="card-unit">ppb</span>
+            </div>
+            <div class="card-subtext">Volatile organics • Threshold: &lt;400 normal</div>
+        </div>
+
+        <!-- eCO2 Card -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-label">Equivalent CO2</span>
+                <span id="eco2-badge" class="status-badge">--</span>
+            </div>
+            <div>
+                <span id="eco2-val" class="card-value">--</span>
+                <span class="card-unit">ppm</span>
+            </div>
+            <div class="card-subtext">Target: &lt;600 ppm excellent, &lt;1000 fair</div>
+        </div>
+
+        <!-- Indoor Climate Card -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-label">Indoor Climate</span>
+                <span id="temp-badge" class="status-badge">--</span>
+            </div>
+            <div>
+                <span id="temp-val" class="card-value">--</span><span class="card-unit">°F</span>
+                <span style="margin: 0 0.5rem; color: var(--border-color);">|</span>
+                <span id="hum-val" class="card-value">--</span><span class="card-unit">%</span>
+            </div>
+            <div class="card-subtext" id="hum-desc">Humidity target: 45% based on weather</div>
+        </div>
+
+        <!-- Outdoor Weather Card -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-label">Outdoor Weather</span>
+                <span class="status-badge" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">NWS Hourly</span>
+            </div>
+            <div>
+                <span id="out-temp-val" class="card-value">--</span><span class="card-unit">°F</span>
+                <span style="margin: 0 0.5rem; color: var(--border-color);">|</span>
+                <span id="out-hum-val" class="card-value">--</span><span class="card-unit">%</span>
+            </div>
+            <div class="card-subtext">National Weather Service forecast</div>
+        </div>
+    </section>
+
+    <!-- Toolbar & Charts -->
+    <div class="toolbar">
+        <h2 class="toolbar-title">Historical Trends</h2>
+        <div class="range-selector">
+            <button class="range-btn" onclick="setHours(6)">6h</button>
+            <button class="range-btn" onclick="setHours(12)">12h</button>
+            <button class="range-btn active" onclick="setHours(24)">24h</button>
+            <button class="range-btn" onclick="setHours(72)">3d</button>
+            <button class="range-btn" onclick="setHours(168)">7d</button>
+        </div>
+    </div>
+
+    <!-- Charts Container -->
+    <section class="charts-container">
+        <!-- AQI Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">📊 Air Quality Index (AQI 1-5)</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="chartAQI"></canvas>
+            </div>
+        </div>
+
+        <!-- TVOC Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">💨 Total Volatile Organic Compounds (TVOC ppb)</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="chartTVOC"></canvas>
+            </div>
+        </div>
+
+        <!-- eCO2 Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">🫧 Estimated CO2 (eCO2 ppm)</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="chartECO2"></canvas>
+            </div>
+        </div>
+
+        <!-- Temperature & Humidity Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">🌡️ Temperature (°F) & Humidity (%) Comparison</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="chartClimate"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <span id="status-footer">Telemetry active • Sampling every 60s</span>
+        <span>RpiWebAirQuality v2.0</span>
+    </footer>
+
+    <!-- Client-Side Dashboard Script -->
+    <script>
+        let currentHours = 24;
+        let chartAQI, chartTVOC, chartECO2, chartClimate;
+
+        // Shared chart dark-mode options
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    labels: { color: '#9ca3af', font: { size: 12 } }
+                },
+                tooltip: {
+                    backgroundColor: '#181c28',
+                    titleColor: '#f3f4f6',
+                    bodyColor: '#e5e7eb',
+                    borderColor: '#333a4f',
+                    borderWidth: 1,
+                    padding: 10
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: {
+                        color: '#9ca3af',
+                        maxTicksLimit: 8,
+                        callback: function(val, index) {
+                            const label = this.getLabelForValue(val);
+                            return label ? label.split(' ')[1] || label : '';
+                        }
+                    }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#9ca3af' }
+                }
+            }
+        };
+
+        // Initialize Charts
+        function initCharts() {
+            // 1. AQI Chart
+            const ctxAQI = document.getElementById('chartAQI').getContext('2d');
+            chartAQI = new Chart(ctxAQI, {
+                type: 'line',
+                data: { labels: [], datasets: [{
+                    label: 'AQI (1-5)',
+                    data: [],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    tension: 0.1,
+                    fill: true
+                }]},
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        x: chartOptions.scales.x,
+                        y: {
+                            min: 0,
+                            max: 5,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#9ca3af',
+                                stepSize: 1,
+                                callback: function(val) {
+                                    const labels = ['0', '1-Exc', '2-Good', '3-Mod', '4-Poor', '5-Bad'];
+                                    return labels[val] !== undefined ? labels[val] : val;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. TVOC Chart
+            const ctxTVOC = document.getElementById('chartTVOC').getContext('2d');
+            chartTVOC = new Chart(ctxTVOC, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    {
+                        label: 'TVOC (ppb)',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        tension: 0.2,
+                        fill: true
+                    }
+                ]},
+                options: chartOptions
+            });
+
+            // 3. eCO2 Chart
+            const ctxECO2 = document.getElementById('chartECO2').getContext('2d');
+            chartECO2 = new Chart(ctxECO2, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    {
+                        label: 'eCO2 (ppm)',
+                        data: [],
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.08)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        tension: 0.2,
+                        fill: true
+                    }
+                ]},
+                options: chartOptions
+            });
+
+            // 4. Climate Chart (Temp & Humidity Indoor vs Outdoor)
+            const ctxClimate = document.getElementById('chartClimate').getContext('2d');
+            chartClimate = new Chart(ctxClimate, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    {
+                        label: 'Indoor Temp (°F)',
+                        data: [],
+                        borderColor: '#ec4899',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Outdoor Temp (°F)',
+                        data: [],
+                        borderColor: '#ec4899',
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        tension: 0.2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Indoor Hum (%)',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.2,
+                        yAxisID: 'y1'
+                    },
+                    {
+                        label: 'Outdoor Hum (%)',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        tension: 0.2,
+                        yAxisID: 'y1'
+                    }
+                ]},
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        x: chartOptions.scales.x,
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Temp (°F)', color: '#ec4899' },
+                            ticks: { color: '#ec4899' },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: 'Humidity (%)', color: '#3b82f6' },
+                            ticks: { color: '#3b82f6' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fetch current live metrics
+        async function fetchCurrent() {
+            try {
+                const res = await fetch('/api/current');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Update text values
+                const aqiNum = data.aqi;
+                document.getElementById('aqi-val').textContent = (aqiNum !== null && aqiNum !== undefined) ? aqiNum : '--';
+                document.getElementById('tvoc-val').textContent = data.tvoc !== null ? data.tvoc : '--';
+                document.getElementById('eco2-val').textContent = data.eco2 !== null ? data.eco2 : '--';
+                document.getElementById('temp-val').textContent = data.temp !== null ? data.temp : '--';
+                document.getElementById('hum-val').textContent = data.hum !== null ? data.hum : '--';
+                document.getElementById('out-temp-val').textContent = data.out_temp !== null ? data.out_temp : '--';
+                document.getElementById('out-hum-val').textContent = data.out_hum !== null ? data.out_hum : '--';
+
+                // Badges
+                setBadge('aqi-badge', data.aqi_label, data.aqi_color, data.aqi_bg);
+                setBadge('tvoc-badge', data.tvoc_label, data.tvoc_color, data.tvoc_bg);
+                setBadge('eco2-badge', data.eco2_label, data.eco2_color, data.eco2_bg);
+                setBadge('temp-badge', data.temp_label, data.temp_color, data.temp_bg);
+
+                // AQI scale bar highlight (1 to 5)
+                const aqiColors = ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444'];
+                for (let i = 1; i <= 5; i++) {
+                    const step = document.getElementById('step-' + i);
+                    if (aqiNum && i <= aqiNum) {
+                        step.style.background = aqiColors[i - 1];
+                    } else {
+                        step.style.background = '#252a38';
+                    }
+                }
+
+                // Humidity subtext
+                if (data.hum_target) {
+                    const diff = data.hum ? (data.hum - data.hum_target).toFixed(1) : 0;
+                    document.getElementById('hum-desc').textContent = 
+                        `Target: ${data.hum_target}% (Diff: ${diff >= 0 ? '+' : ''}${diff}%) • Rating: ${data.hum_label}`;
+                }
+
+                // Header status
+                document.getElementById('subheading').textContent = `Last reading: ${data.timestamp || 'just now'}`;
+            } catch (err) {
+                console.error("Failed to fetch current readings:", err);
+            }
+        }
+
+        // Fetch historical series for charts
+        async function fetchHistory() {
+            try {
+                const res = await fetch(`/api/history?hours=${currentHours}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const labels = data.timestamps || [];
+
+                // Update AQI chart
+                chartAQI.data.labels = labels;
+                chartAQI.data.datasets[0].data = data.aqi;
+                chartAQI.update('none');
+
+                // Update TVOC chart
+                chartTVOC.data.labels = labels;
+                chartTVOC.data.datasets[0].data = data.tvoc;
+                chartTVOC.update('none');
+
+                // Update eCO2 chart
+                chartECO2.data.labels = labels;
+                chartECO2.data.datasets[0].data = data.eco2;
+                chartECO2.update('none');
+
+                // Update Climate chart
+                chartClimate.data.labels = labels;
+                chartClimate.data.datasets[0].data = data.temp;
+                chartClimate.data.datasets[1].data = data.out_temp;
+                chartClimate.data.datasets[2].data = data.hum;
+                chartClimate.data.datasets[3].data = data.out_hum;
+                chartClimate.update('none');
+            } catch (err) {
+                console.error("Failed to fetch history:", err);
+            }
+        }
+
+        function setBadge(id, label, color, bg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = label || '--';
+            el.style.color = color || 'inherit';
+            el.style.background = bg || 'transparent';
+        }
+
+        function setHours(h) {
+            currentHours = h;
+            document.querySelectorAll('.range-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            fetchHistory();
+        }
+
+        function fetchData() {
+            fetchCurrent();
+            fetchHistory();
+        }
+
+        // On document load
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            fetchData();
+            // Live auto-refresh: current readings every 20s, history every 60s
+            setInterval(fetchCurrent, 20000);
+            setInterval(fetchHistory, 60000);
+        });
+    </script>
+</body>
+</html>

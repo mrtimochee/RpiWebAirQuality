@@ -1,16 +1,21 @@
 #!/bin/bash
-echo "Installing dependacies for WebAirQuality"
-echo "Trying to install the following dependacies: pandas\n matplotlib\n Adafruit_DHT\n adafruit_ens160\n flask\n apscheduler"
-echo "1 of 6"
-echo pip install pandas
-echo "2 of 6"
-echo pip install matplotlib
-echo "3 of 6"
-echo pip install Adafruit_DHT
-echo "4 of 6"
-echo pip install adafruit_ens160
-echo "5 of 6"
-echo pip install flask
-echo "6 of 6"
-echo pip install apscheduler
-echo "Dependacies Installer Complete"
+# Dependencies installation script for WebAirQuality v2.0
+set -e
+
+echo "=============================================="
+echo "Installing dependencies for WebAirQuality v2.0"
+echo "=============================================="
+
+# Update package lists
+sudo apt-get update
+
+# Install system dependencies for GPIO and I2C if not already present
+sudo apt-get install -y python3-pip python3-setuptools python3-requests python3-flask
+
+# Install Python packages
+pip3 install flask apscheduler requests adafruit-circuitpython-ens160 Adafruit_DHT
+
+echo ""
+echo "Dependencies installation complete!"
+echo "Make sure I2C interface is enabled: sudo raspi-config -> Interfacing Options -> I2C"
+echo "To run the dashboard: python3 WebAirQuality.py"
