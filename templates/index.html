@@ -473,6 +473,11 @@
         const chartOptions = {
             responsive: true,
             maintainAspectRatio: false,
+            elements: {
+                point: {
+                    radius: 0
+                }
+            },
             interaction: {
                 mode: 'index',
                 intersect: false,
@@ -521,7 +526,7 @@
                     borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.12)',
                     borderWidth: 2,
-                    pointRadius: 4,
+                    pointRadius: 0,
                     pointHoverRadius: 6,
                     tension: 0.1,
                     fill: true
@@ -558,7 +563,7 @@
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.08)',
                         borderWidth: 2,
-                        pointRadius: 3,
+                        pointRadius: 0,
                         pointHoverRadius: 5,
                         tension: 0.2,
                         fill: true
@@ -578,7 +583,7 @@
                         borderColor: '#8b5cf6',
                         backgroundColor: 'rgba(139, 92, 246, 0.08)',
                         borderWidth: 2,
-                        pointRadius: 3,
+                        pointRadius: 0,
                         pointHoverRadius: 5,
                         tension: 0.2,
                         fill: true
@@ -597,7 +602,7 @@
                         data: [],
                         borderColor: '#ec4899',
                         borderWidth: 2,
-                        pointRadius: 3,
+                        pointRadius: 0,
                         tension: 0.2,
                         yAxisID: 'y'
                     },
@@ -616,7 +621,7 @@
                         data: [],
                         borderColor: '#3b82f6',
                         borderWidth: 2,
-                        pointRadius: 3,
+                        pointRadius: 0,
                         tension: 0.2,
                         yAxisID: 'y1'
                     },
