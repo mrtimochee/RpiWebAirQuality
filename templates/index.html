@@ -2,10 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Raspberry Pi Air Quality Monitor</title>
+
+    <!-- PWA Manifest & App Icons -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+    <!-- Mobile & PWA Theme Meta -->
+    <meta name="theme-color" content="#0a0c10">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AirQuality">
+    <meta name="description" content="Raspberry Pi Real-Time Air Quality & Climate Monitoring Dashboard">
+
     <!-- Chart.js from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
     <style>
         :root {
             --bg-body: #0a0c10;
@@ -115,6 +131,27 @@
         .refresh-btn:hover {
             background: var(--bg-card-hover);
             border-color: #3b82f6;
+        }
+
+        .install-btn {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #60a5fa;
+            padding: 0.45rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .install-btn:hover {
+            background: rgba(59, 130, 246, 0.25);
+            border-color: #3b82f6;
+            color: #ffffff;
         }
 
         /* Metric Cards Grid */
@@ -295,7 +332,8 @@
             color: var(--text-muted);
         }
 
-        @media (max-width: 768px) {
+        /* Mobile specific adjustments: disable touch hover & enable frictionless scrolling */
+        @media (max-width: 768px), (hover: none), (pointer: coarse) {
             body {
                 padding: 0.75rem;
                 gap: 0.85rem;
@@ -305,6 +343,11 @@
             }
             .chart-wrapper {
                 height: 200px;
+            }
+            /* Disables touch interception and hover-over tooltips on mobile canvas so scrolling is smooth */
+            .chart-wrapper canvas {
+                touch-action: pan-y !important;
+                pointer-events: none !important;
             }
         }
     </style>
@@ -318,6 +361,7 @@
             <p id="subheading">Connecting to Raspberry Pi sensor telemetry...</p>
         </div>
         <div class="header-controls">
+            <button id="pwa-install-btn" class="install-btn" style="display: none;" onclick="triggerPWAInstall()">📲 Install App</button>
             <div class="live-badge">
                 <span class="pulse-dot"></span>
                 <span>LIVE</span>
@@ -461,7 +505,7 @@
     <!-- Footer -->
     <footer>
         <span id="status-footer">Telemetry active • Sampling every 60s</span>
-        <span>RpiWebAirQuality v2.0</span>
+        <span>RpiWebAirQuality v2.0 PWA</span>
     </footer>
 
     <!-- Client-Side Dashboard Script -->
@@ -469,48 +513,65 @@
         let currentHours = 24;
         let chartAQI, chartTVOC, chartECO2, chartClimate;
 
-        // Shared chart dark-mode options
-        const chartOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            plugins: {
-                legend: {
-                    labels: { color: '#9ca3af', font: { size: 12 } }
+        // Detect mobile/touch devices
+        function isMobileDevice() {
+            return window.matchMedia('(hover: none), (pointer: coarse), (max-width: 768px)').matches;
+        }
+
+        // Shared chart dark-mode options (configured to disable tooltips & hovers on mobile)
+        function getBaseChartOptions() {
+            const isMobile = isMobileDevice();
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                // On mobile, eliminate interaction events to suppress sticky tooltips
+                events: isMobile ? [] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
+                interaction: {
+                    mode: isMobile ? false : 'index',
+                    intersect: false,
                 },
-                tooltip: {
-                    backgroundColor: '#181c28',
-                    titleColor: '#f3f4f6',
-                    bodyColor: '#e5e7eb',
-                    borderColor: '#333a4f',
-                    borderWidth: 1,
-                    padding: 10
-                }
-            },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: {
-                        color: '#9ca3af',
-                        maxTicksLimit: 8,
-                        callback: function(val, index) {
-                            const label = this.getLabelForValue(val);
-                            return label ? label.split(' ')[1] || label : '';
-                        }
+                hover: {
+                    mode: isMobile ? null : 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#9ca3af', font: { size: 12 } }
+                    },
+                    tooltip: {
+                        enabled: !isMobile,
+                        backgroundColor: '#181c28',
+                        titleColor: '#f3f4f6',
+                        bodyColor: '#e5e7eb',
+                        borderColor: '#333a4f',
+                        borderWidth: 1,
+                        padding: 10
                     }
                 },
-                y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#9ca3af' }
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: {
+                            color: '#9ca3af',
+                            maxTicksLimit: 8,
+                            callback: function(val, index) {
+                                const label = this.getLabelForValue(val);
+                                return label ? label.split(' ')[1] || label : '';
+                            }
+                        }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#9ca3af' }
+                    }
                 }
-            }
-        };
+            };
+        }
 
         // Initialize Charts
         function initCharts() {
+            const baseOptions = getBaseChartOptions();
+
             // 1. AQI Chart
             const ctxAQI = document.getElementById('chartAQI').getContext('2d');
             chartAQI = new Chart(ctxAQI, {
@@ -527,9 +588,9 @@
                     fill: true
                 }]},
                 options: {
-                    ...chartOptions,
+                    ...baseOptions,
                     scales: {
-                        x: chartOptions.scales.x,
+                        x: baseOptions.scales.x,
                         y: {
                             min: 0,
                             max: 5,
@@ -538,7 +599,7 @@
                                 color: '#9ca3af',
                                 stepSize: 1,
                                 callback: function(val) {
-                                    const labels = ['0', '1-Exc', '2-Good', '3-Mod', '4-Poor', '5-Bad'];
+                                    const labels = ['0 (Warm)', '1-Exc', '2-Good', '3-Mod', '4-Poor', '5-Bad'];
                                     return labels[val] !== undefined ? labels[val] : val;
                                 }
                             }
@@ -564,7 +625,7 @@
                         fill: true
                     }
                 ]},
-                options: chartOptions
+                options: baseOptions
             });
 
             // 3. eCO2 Chart
@@ -584,7 +645,7 @@
                         fill: true
                     }
                 ]},
-                options: chartOptions
+                options: baseOptions
             });
 
             // 4. Climate Chart (Temp & Humidity Indoor vs Outdoor)
@@ -632,9 +693,9 @@
                     }
                 ]},
                 options: {
-                    ...chartOptions,
+                    ...baseOptions,
                     scales: {
-                        x: chartOptions.scales.x,
+                        x: baseOptions.scales.x,
                         y: {
                             type: 'linear',
                             display: true,
@@ -657,6 +718,27 @@
                 }
             });
         }
+
+        // Dynamically adjust chart hover and interaction on viewport / orientation changes
+        function updateChartsForViewport() {
+            const isMobile = isMobileDevice();
+            const charts = [chartAQI, chartTVOC, chartECO2, chartClimate];
+            charts.forEach(chart => {
+                if (!chart) return;
+                chart.options.events = isMobile ? [] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'];
+                if (chart.options.plugins && chart.options.plugins.tooltip) {
+                    chart.options.plugins.tooltip.enabled = !isMobile;
+                }
+                chart.options.interaction = chart.options.interaction || {};
+                chart.options.interaction.mode = isMobile ? false : 'index';
+                chart.options.hover = chart.options.hover || {};
+                chart.options.hover.mode = isMobile ? null : 'index';
+                chart.update('none');
+            });
+        }
+
+        window.addEventListener('resize', updateChartsForViewport);
+        window.addEventListener('orientationchange', updateChartsForViewport);
 
         // Fetch current live metrics
         async function fetchCurrent() {
@@ -760,6 +842,47 @@
         function fetchData() {
             fetchCurrent();
             fetchHistory();
+        }
+
+        // Register PWA Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .then(reg => {
+                        console.log('[PWA] Service Worker registered with scope:', reg.scope);
+                    })
+                    .catch(err => {
+                        console.warn('[PWA] Service Worker registration failed:', err);
+                    });
+            });
+        }
+
+        // PWA Install Prompt Banner
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'inline-flex';
+        });
+
+        window.addEventListener('appinstalled', () => {
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'none';
+            deferredPrompt = null;
+            console.log('[PWA] Air Quality Monitor installed successfully');
+        });
+
+        function triggerPWAInstall() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('[PWA] User accepted install prompt');
+                    }
+                    deferredPrompt = null;
+                });
+            }
         }
 
         // On document load

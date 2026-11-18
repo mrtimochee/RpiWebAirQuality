@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Air quality logic, categorization, and threshold evaluation.
-Fixes logic bugs from legacy version (humidity elif ordering, eCO2 1500 threshold, typos),
-handles sensor warm-up (AQI 0), derives fallback AQI from TVOC if needed,
+Fixes logic bugs from legacy version (humidity elif ordering, eCO2 1500 threshold, typos)
 and provides color-coded badges and descriptions for UI rendering.
 """
 
@@ -11,50 +10,24 @@ from typing import Dict, Any, Optional
 # Color constants
 COLOR_EMERALD = "#10b981"  # Excellent / Ideal
 COLOR_BLUE    = "#3b82f6"  # Good / Normal
-COLOR_AMBER   = "#f59e0b"  # Moderate / Fair / Elevated / Warming Up
+COLOR_AMBER   = "#f59e0b"  # Moderate / Fair / Elevated
 COLOR_ORANGE  = "#f97316"  # Poor / Warm
 COLOR_RED     = "#ef4444"  # Unhealthy / Bad / Serious
 COLOR_PURPLE  = "#8b5cf6"  # Very High
 COLOR_GRAY    = "#6b7280"  # Unknown / Missing
 
 
-def derive_aqi_from_tvoc(tvoc: Optional[float]) -> Optional[int]:
-    """
-    Derive German UBA Air Quality Index (1-5) from TVOC (ppb)
-    as a robust fallback when the sensor's AQI register is warming up or 0.
-    UBA mapping:
-    - < 400 ppb: 1 (Excellent)
-    - 400 - 1000 ppb: 2 (Good)
-    - 1000 - 1500 ppb: 3 (Moderate)
-    - 1500 - 2200 ppb: 4 (Poor)
-    - >= 2200 ppb: 5 (Unhealthy)
-    """
-    if tvoc is None:
-        return None
-    if tvoc < 400:
-        return 1
-    elif tvoc < 1000:
-        return 2
-    elif tvoc < 1500:
-        return 3
-    elif tvoc < 2200:
-        return 4
-    else:
-        return 5
-
-
 def classify_aqi(aqi: Optional[int]) -> Dict[str, str]:
     """
     Classify Air Quality Index (1 - 5).
-    Includes handling for 0 (Warming Up).
+    1: Excellent, 2: Good, 3: Moderate, 4: Poor, 5: Unhealthy
     """
     mapping = {
-        0: {"label": "Warming Up", "color": COLOR_AMBER,   "bg": "rgba(245, 158, 11, 0.15)"},
-        1: {"label": "Excellent",  "color": COLOR_EMERALD, "bg": "rgba(16, 185, 129, 0.15)"},
-        2: {"label": "Good",       "color": COLOR_BLUE,    "bg": "rgba(59, 130, 246, 0.15)"},
-        3: {"label": "Moderate",   "color": COLOR_AMBER,   "bg": "rgba(245, 158, 11, 0.15)"},
-        4: {"label": "Poor",       "color": COLOR_ORANGE,  "bg": "rgba(249, 115, 22, 0.15)"},
-        5: {"label": "Unhealthy",  "color": COLOR_RED,     "bg": "rgba(239, 68, 68, 0.15)"}
+        1: {"label": "Excellent", "color": COLOR_EMERALD, "bg": "rgba(16, 185, 129, 0.15)"},
+        2: {"label": "Good",      "color": COLOR_BLUE,    "bg": "rgba(59, 130, 246, 0.15)"},
+        3: {"label": "Moderate",  "color": COLOR_AMBER,   "bg": "rgba(245, 158, 11, 0.15)"},
+        4: {"label": "Poor",      "color": COLOR_ORANGE,  "bg": "rgba(249, 115, 22, 0.15)"},
+        5: {"label": "Unhealthy", "color": COLOR_RED,     "bg": "rgba(239, 68, 68, 0.15)"}
     }
     if aqi in mapping:
         return mapping[aqi]
@@ -178,28 +151,20 @@ def classify_humidity(humidity: Optional[float], outside_temp_f: Optional[float]
 
 def enrich_reading(reading: Dict[str, Any]) -> Dict[str, Any]:
     """Take a raw reading dict from the DB and augment it with evaluation labels and colors."""
-    raw_aqi = reading.get("aqi")
-    tvoc = reading.get("tvoc")
-
-    # If AQI is None or 0 (warming up), try deriving from TVOC so dashboard always has an AQI
-    effective_aqi = raw_aqi
-    if (effective_aqi is None or effective_aqi == 0) and tvoc is not None:
-        effective_aqi = derive_aqi_from_tvoc(tvoc)
-
-    aqi_eval = classify_aqi(effective_aqi)
-    tvoc_eval = classify_tvoc(tvoc)
+    aqi_eval = classify_aqi(reading.get("aqi"))
+    tvoc_eval = classify_tvoc(reading.get("tvoc"))
     eco2_eval = classify_eco2(reading.get("eco2"))
     temp_eval = classify_temp(reading.get("temp"))
     hum_eval = classify_humidity(reading.get("hum"), reading.get("out_temp"))
 
     return {
         "timestamp": reading.get("timestamp"),
-        "aqi": effective_aqi if effective_aqi is not None else raw_aqi,
+        "aqi": reading.get("aqi"),
         "aqi_label": aqi_eval["label"],
         "aqi_color": aqi_eval["color"],
         "aqi_bg": aqi_eval["bg"],
 
-        "tvoc": tvoc,
+        "tvoc": reading.get("tvoc"),
         "tvoc_label": tvoc_eval["label"],
         "tvoc_color": tvoc_eval["color"],
         "tvoc_bg": tvoc_eval["bg"],

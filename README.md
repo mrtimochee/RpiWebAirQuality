@@ -9,6 +9,8 @@ A high-performance Raspberry Pi air quality monitor and responsive web dashboard
 - **Zero SD Card Wear**: Migrated from rewriting monolithic pickle and HTML files every minute to an atomic SQLite database with Write-Ahead Logging (WAL).
 - **Dynamic Sensor Compensation**: Feeds live ambient temperature and humidity from the AM2302 directly into the ENS160 registers for maximum VOC and eCO2 measurement accuracy.
 - **Responsive Dark-Mode UI**: Mobile-friendly dashboard with live status cards, scale indicators, and interactive synchronized charts with configurable time horizons (6h, 12h, 24h, 3d, 7d).
+- **Installable Progressive Web App (PWA)**: Complete with Web App Manifest, Service Worker offline caching, and high-resolution icons. Can be installed directly to home screens on iOS, Android, and Desktop as a standalone app.
+- **Mobile-Optimized Touch Experience**: Automatic suppression of sticky hover tooltips on touch devices allowing seamless, frictionless vertical scrolling across graphs.
 - **Automatic Legacy Migration**: Seamlessly imports historical data from `aq_data.pkl` into the new SQLite database on first startup.
 
 ---
@@ -62,6 +64,14 @@ http://raspberrypi.local:9999/
 ```
 
 Default port is `9999`.
+
+---
+
+## Installing as a Progressive Web App (PWA)
+You can install the dashboard directly as a standalone app with its own home screen icon:
+- **Android / Chrome / Edge**: Click the **📲 Install App** button in the header, or tap browser menu (⋮) -> **Install app** / **Add to Home screen**.
+- **iOS / Safari**: Tap the **Share** button (box with upward arrow) -> **Add to Home Screen**.
+- **Desktop (Chrome/Edge)**: Click the install icon in the address bar or the header button.
 
 ---
 

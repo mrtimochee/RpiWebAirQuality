@@ -13,7 +13,7 @@ import signal
 import socket
 import logging
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, make_response
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Internal modules
@@ -111,6 +111,24 @@ def job_db_prune():
 def index():
     """Serve the modern dark-mode air quality dashboard."""
     return render_template('index.html')
+
+
+@app.route('/manifest.json')
+def manifest():
+    """Serve PWA manifest with application/manifest+json content type."""
+    response = make_response(app.send_static_file('manifest.json'))
+    response.headers['Content-Type'] = 'application/manifest+json'
+    return response
+
+
+@app.route('/service-worker.js')
+def service_worker():
+    """Serve PWA service worker with root scope."""
+    response = make_response(app.send_static_file('service-worker.js'))
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
 
 
 @app.route('/api/current')
